@@ -2,7 +2,6 @@
 
 from doctest import master
 import getopt
-import site
 import sys
 
 import scrypt
@@ -92,6 +91,15 @@ def LEN(x):
 def hex_log(x):
   return(hashlib.sha256(x).hexdigest())
 
+def debug_msg(x):
+  global verbose
+
+  if verbose:
+    print(x)
+
+def error_msg(x):
+  sys.stderr.write("ERROR: " + x + '\n')
+
 def usage():
   pass
 
@@ -102,8 +110,8 @@ def generate_masterkey(masterpass, name):
   scope = 'com.lyndir.masterpassword'
   seed = scope.encode() + LEN(name.encode()) + name.encode()
 
-  if verbose: print('masterPassword.id: ' + hex_log(key))
-  if verbose: print('masterKeySalt.id: ' + hex_log(seed))
+  debug_msg('masterPassword.id: ' + hex_log(key))
+  debug_msg('masterKeySalt.id: ' + hex_log(seed))
 
   N = 32768
   r = 8
@@ -119,7 +127,7 @@ def generate_sitekey(key, site_name, site_counter=1):
   seed = scope.encode() + LEN(site_name.encode()) + site_name.encode() + site_counter.to_bytes(4,'big')
   # message = seed.encode()
 
-  if verbose: print('siteSalt.id: ' + hex_log(seed))
+  debug_msg('siteSalt.id: ' + hex_log(seed))
 
   return hmac.new(key, seed, hashlib.sha256).digest()
 
@@ -131,7 +139,7 @@ def generate_password(site_key, template):
   for i, t in enumerate(template):
     pass_chars = template_chars[template[i]]
     pass_char = pass_chars[int(site_key[i+1]) % len(pass_chars)]
-    if verbose: print(f"  - class: {t}, index: {site_key[i+1]:3} (0x{site_key[i+1]:02x}) => character: {pass_char}")
+    debug_msg(f"  - class: {t}, index: {site_key[i+1]:3} (0x{site_key[i+1]:02x}) => character: {pass_char}")
     pass_word += pass_char
 
   return pass_word
@@ -161,7 +169,7 @@ def main():
       masterpass = a
     elif o == "-t":
       if a not in template_class.keys():
-        sys.stderr.write("ERROR: Unknown template class " + a + "\n")
+        error_msg("Unknown template class " + a)
         exit(1)
       else:
         templates = template_class[a]
@@ -169,10 +177,10 @@ def main():
       try:
         siteCounter = int(a)
       except ValueError:
-        sys.stderr.write("ERROR: Site counter is not a number " + a + "\n")
+        error_msg("Site counter is not a number " + a)
         exit(1)       
     else:
-      sys.stderr.write('ERROR: Unrecognized option ' + o + "\n")
+      error_msg('ERROR: Unrecognized option ' + o)
       exit(1)
 
   if verbose:
@@ -184,15 +192,15 @@ def main():
 
   masterKey = generate_masterkey(masterpass, name)
 
-  if verbose: print('masterKey.id: ' + hex_log(masterKey))
+  debug_msg('masterKey.id: ' + hex_log(masterKey))
 
   siteKey = generate_sitekey(masterKey, siteName, siteCounter)
 
-  if verbose: print('siteKey.id: ' + hex_log(siteKey))
+  debug_msg('siteKey.id: ' + hex_log(siteKey))
 
   template = templates[ siteKey[0] % len(templates)]
 
-  if verbose: print(f"template: {siteKey[0]} => {template}")
+  debug_msg(f"template: {siteKey[0]} => {template}")
 
   pass_word = generate_password(siteKey, template)
 
