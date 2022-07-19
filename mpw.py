@@ -1,9 +1,15 @@
+#!/usr/bin/env python3
+
+from doctest import master
 import getopt
+import site
 import sys
 
 import scrypt
 import hmac
 import hashlib
+
+verbose = False
 
 key_scopes = {
   'authentication': 'com.lyndir.masterpassword',
@@ -89,35 +95,8 @@ def hex_log(x):
 def usage():
   pass
 
-def main():
-
-  argv = sys.argv[1:]
-
-  opts, args = getopt.getopt(argv, 'u:U:m:M:t:P:c:a:p:C:f:F:R:vqh')
-
-  name = 'test'
-  masterpass = 'test'
-  siteName = 'test'
-  siteCounter = 1
-  verbose = False
-  templates = template_class['long']
-
-  for o, a in opts:
-    if o == "-v":
-      verbose = True
-    elif o == "-u":
-      name = a
-    elif o == "-M":
-      masterpass = a
-    elif o == "-c":
-      siteCounter = a
-    elif o == "-t":
-      templates = template_class[a]
-    else:
-      print('unrecognized option: ' + o)
-
-  if args:
-    siteName = args[0]
+def generate_masterkey(masterpass, name):
+  global verbose
 
   key = masterpass.encode()
   scope = 'com.lyndir.masterpassword'
@@ -131,17 +110,83 @@ def main():
   p = 2
   dkLen = 64
 
-  masterKey = scrypt.hash(key, seed, N, r, p, dkLen)
+  return scrypt.hash(key, seed, N, r, p, dkLen)
 
-  if verbose: print('masterKey.id: ' + hex_log(masterKey))
+def generate_sitekey(key, site_name, site_counter=1):
+  global verbose
 
-  key = masterKey
-  seed = scope.encode() + LEN(siteName.encode()) + siteName.encode() + int(siteCounter).to_bytes(4,'big')
+  scope = 'com.lyndir.masterpassword'
+  seed = scope.encode() + LEN(site_name.encode()) + site_name.encode() + site_counter.to_bytes(4,'big')
   # message = seed.encode()
 
   if verbose: print('siteSalt.id: ' + hex_log(seed))
 
-  siteKey = hmac.new(key, seed, hashlib.sha256).digest()
+  return hmac.new(key, seed, hashlib.sha256).digest()
+
+def generate_password(site_key, template):
+  global verbose
+
+  pass_word = ''
+
+  for i, t in enumerate(template):
+    pass_chars = template_chars[template[i]]
+    pass_char = pass_chars[int(site_key[i+1]) % len(pass_chars)]
+    if verbose: print(f"  - class: {t}, index: {site_key[i+1]:3} (0x{site_key[i+1]:02x}) => character: {pass_char}")
+    pass_word += pass_char
+
+  return pass_word
+
+def main():
+  global verbose
+
+  argv = sys.argv[1:]
+
+  opts, args = getopt.getopt(argv, 'u:U:m:M:t:T:P:c:a:p:C:f:F:R:vqh')
+
+  name = 'test'
+  masterpass = 'test'
+  siteName = 'test'
+  siteCounter = 1
+  templates = template_class['long']
+
+  for o, a in opts:
+    if o == "-h":
+      usage()
+      exit(0)
+    elif o == "-v":
+      verbose = True
+    elif o == "-u":
+      name = a
+    elif o == "-M":
+      masterpass = a
+    elif o == "-t":
+      if a not in template_class.keys():
+        sys.stderr.write("ERROR: Unknown template class " + a + "\n")
+        exit(1)
+      else:
+        templates = template_class[a]
+    elif o == "-c":
+      try:
+        siteCounter = int(a)
+      except ValueError:
+        sys.stderr.write("ERROR: Site counter is not a number " + a + "\n")
+        exit(1)       
+    else:
+      sys.stderr.write('ERROR: Unrecognized option ' + o + "\n")
+      exit(1)
+
+  if verbose:
+    print(opts)
+    print(args)
+
+  if args:
+    siteName = args[0]
+
+  masterKey = generate_masterkey(masterpass, name)
+
+  if verbose: print('masterKey.id: ' + hex_log(masterKey))
+
+  siteKey = generate_sitekey(masterKey, siteName, siteCounter)
 
   if verbose: print('siteKey.id: ' + hex_log(siteKey))
 
@@ -149,13 +194,7 @@ def main():
 
   if verbose: print(f"template: {siteKey[0]} => {template}")
 
-  pass_word = ''
-
-  for i, t in enumerate(template):
-    pass_chars = template_chars[template[i]]
-    pass_char = pass_chars[int(siteKey[i+1]) % len(pass_chars)]
-    if verbose: print(f"  - class: {t}, index: {siteKey[i+1]:3} (0x{siteKey[i+1]:02x}) => character: {pass_char}")
-    pass_word += pass_char
+  pass_word = generate_password(siteKey, template)
 
   print(f"  => password: {pass_word}")
 
