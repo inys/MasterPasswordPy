@@ -63,13 +63,18 @@ templates_pin = [
   'nnnn'
 ]
 
+templates_name = [
+  'cvccvcvcv'
+]
+
 template_class = {
   'maximum': templates_maximum,
   'long': templates_long,
   'medium': templates_medium,
   'short': templates_short,
   'basic': templates_basic,
-  'pin': templates_pin
+  'pin': templates_pin,
+  'name': templates_name
 }
 
 template_chars = {
@@ -82,6 +87,12 @@ template_chars = {
   'n': '0123456789',
   'o': "@&%?,=[]_:-+*$#!'^~;()/.",
   'x': "AEIOUaeiouBCDFGHJKLMNPQRSTVWXYZbcdfghjklmnpqrstvwxyz0123456789!@#$%^&*()",
+}
+
+scopes = {
+  'a': 'com.lyndir.masterpassword',
+  'i': 'com.lyndir.masterpassword.login',
+  'r': 'com.lyndir.masterpassword.answer'
 }
 
 def LEN(x):
@@ -105,8 +116,8 @@ def usage():
 def generate_masterkey(masterpass, name):
   global verbose
 
+  scope = scopes['a']
   key = masterpass.encode()
-  scope = 'com.lyndir.masterpassword'
   seed = scope.encode() + LEN(name.encode()) + name.encode()
 
   debug_msg('masterPassword.id: ' + hex_log(key))
@@ -119,10 +130,9 @@ def generate_masterkey(masterpass, name):
 
   return scrypt.hash(key, seed, N, r, p, dkLen)
 
-def generate_sitekey(key, site_name, site_counter=1):
+def generate_sitekey(key, scope, site_name, site_counter=1):
   global verbose
-
-  scope = 'com.lyndir.masterpassword'
+  
   seed = scope.encode() + LEN(site_name.encode()) + site_name.encode() + site_counter.to_bytes(4,'big')
   # message = seed.encode()
 
@@ -155,6 +165,7 @@ def main():
   siteName = 'test'
   siteCounter = 1
   templates = template_class['long']
+  scope = scopes['a']
 
   for o, a in opts:
     if o == "-h":
@@ -177,7 +188,13 @@ def main():
         siteCounter = int(a)
       except ValueError:
         error_msg("Site counter is not a number " + a)
-        exit(1)       
+        exit(1)
+    elif o == "-p":
+      if a not in scopes.keys():
+        error_msg("Unknown scope " + a)
+        exit(1)
+      else:
+        scope = scopes[a]   
     else:
       error_msg('ERROR: Unrecognized option ' + o)
       exit(1)
@@ -193,7 +210,7 @@ def main():
 
   debug_msg('masterKey.id: ' + hex_log(masterKey))
 
-  siteKey = generate_sitekey(masterKey, siteName, siteCounter)
+  siteKey = generate_sitekey(masterKey, scope, siteName, siteCounter)
 
   debug_msg('siteKey.id: ' + hex_log(siteKey))
 
